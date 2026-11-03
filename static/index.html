@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Model Lab</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%237b8cff'/%3E%3Cg transform='translate(5 5) scale(.92)' fill='none' stroke='%230b0d12' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 3h6'/%3E%3Cpath d='M10 3v6.5L4.6 18.4A2 2 0 0 0 6.3 21.5h11.4a2 2 0 0 0 1.7-3.1L14 9.5V3'/%3E%3Cpath d='M7.6 15h8.8'/%3E%3C/g%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/css/app.css">
+  <script>
+    // Apply the saved theme before first paint.
+    try {
+      document.documentElement.dataset.theme = JSON.parse(localStorage.getItem('modellab.settings') || '{}').theme || 'dark';
+    } catch (e) { /* keep the default */ }
+  </script>
+</head>
+<body>
+<div class="app" id="app">
+
+  <!-- ============================== Sidebar ============================== -->
+  <aside class="sidebar" id="sidebar" aria-label="Connection and settings">
+    <div class="brand">
+      <span class="brand-mark"><i data-icon="flask"></i></span>
+      <span class="brand-name">Model Lab</span>
+      <span class="badge badge-mock" id="mockBadge" hidden title="MOCK=1: replies come from a built-in fake provider">Mock mode</span>
+      <span class="spacer"></span>
+      <button class="icon-btn only-narrow" id="closeSidebar" aria-label="Close settings"><i data-icon="x"></i></button>
+    </div>
+
+    <div class="sidebar-scroll">
+      <section class="card">
+        <div class="card-head"><i data-icon="link"></i><h2>Connection</h2></div>
+        <div class="card-body">
+          <div class="seg" id="providerSeg" role="group" aria-label="Provider">
+            <button type="button" data-provider="openrouter">OpenRouter</button>
+            <button type="button" data-provider="huggingface">Hugging Face</button>
+          </div>
+
+          <div class="field">
+            <label for="apiKey"><span id="apiKeyLabel">API key</span><span class="spacer"></span>
+              <a id="keyLink" href="#" target="_blank" rel="noopener noreferrer">Get a key</a></label>
+            <div class="input-wrap">
+              <input class="input mono" id="apiKey" name="modellab-api-key" type="password" autocomplete="off" spellcheck="false" dir="ltr">
+              <button type="button" class="icon-btn" id="toggleKey" aria-label="Show or hide the key"><i data-icon="eye"></i></button>
+            </div>
+            <label class="check" title="On: keys are saved in this browser (localStorage). Off: they are forgotten when the page is closed or reloaded."><input type="checkbox" id="rememberKey"> Remember on this device</label>
+            <div class="hint" id="keyHint"></div>
+          </div>
+
+          <div class="field">
+            <div class="label">Model</div>
+            <div id="mainPicker"></div>
+          </div>
+
+          <div class="field" id="pinField" hidden>
+            <label for="pinProvider">Provider<span class="spacer"></span><span class="hint">optional</span></label>
+            <input class="input mono" id="pinProvider" list="pinList" type="text" autocomplete="off" spellcheck="false"
+                   autocapitalize="off" dir="ltr" placeholder="Any - OpenRouter chooses"
+                   title="Pin this model to one of its providers on OpenRouter: every request goes to that provider only, with fallbacks off. If it cannot serve, the request fails with an error; it is never sent to another provider.">
+            <datalist id="pinList"></datalist>
+            <div class="hint" id="pinHint"></div>
+          </div>
+
+          <button type="button" class="btn btn-block" id="testConn"><i data-icon="activity"></i><span>Test connection</span></button>
+          <div id="connResult" hidden></div>
+
+          <div class="field" id="recentsField" hidden>
+            <div class="label">Recent models</div>
+            <div class="chips" id="recents"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><i data-icon="sliders"></i><h2>Parameters</h2></div>
+        <div class="card-body">
+          <div class="field">
+            <label for="temperature">Temperature</label>
+            <div class="range-row">
+              <input type="range" id="temperature" min="0" max="2" step="0.05" aria-label="Temperature">
+              <input class="input" type="number" id="temperatureNum" min="0" max="2" step="0.05" aria-label="Temperature value">
+            </div>
+          </div>
+          <div class="field">
+            <label for="maxTokens">Max tokens</label>
+            <input class="input" type="number" id="maxTokens" min="1" max="200000" step="1">
+          </div>
+          <div class="field">
+            <label for="systemPrompt">System prompt</label>
+            <textarea class="textarea" id="systemPrompt" rows="3" dir="auto" placeholder="Optional. Used by Chat, Arena and Speed."></textarea>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><i data-icon="award"></i><h2>Judge model</h2><span class="spacer"></span>
+          <span class="badge badge-neutral" id="judgeState">off</span></div>
+        <div class="card-body">
+          <div class="hint">Optional. Grades open-ended answers: Writing and Honesty tests, custom judge tests and Arena verdicts.</div>
+          <div id="judgePicker"></div>
+          <div class="field" id="judgeKeyField" hidden>
+            <label for="judgeKey" id="judgeKeyLabel">API key</label>
+            <input class="input mono" id="judgeKey" name="modellab-judge-key" type="password" autocomplete="off" spellcheck="false" dir="ltr">
+          </div>
+          <button type="button" class="btn btn-sm btn-ghost" id="clearJudge" hidden><i data-icon="x"></i><span>Remove judge</span></button>
+        </div>
+      </section>
+    </div>
+
+    <div class="sidebar-foot"><i data-icon="lock"></i><span id="footNote">Keys are sent only to your local server.</span></div>
+  </aside>
+  <div class="backdrop" id="backdrop"></div>
+
+  <!-- ============================== Main ============================== -->
+  <main class="main">
+    <header class="topbar">
+      <button class="icon-btn only-narrow" id="openSidebar" aria-label="Open settings"><i data-icon="menu"></i></button>
+      <nav class="tabs" role="tablist" aria-label="Sections">
+        <button class="tab" role="tab" data-tab="chat"><i data-icon="chat"></i><span>Chat</span></button>
+        <button class="tab" role="tab" data-tab="benchmark"><i data-icon="benchmark"></i><span>Benchmark</span><b class="tab-badge" id="benchTabBadge" title="A benchmark is running" hidden></b></button>
+        <button class="tab" role="tab" data-tab="arena"><i data-icon="arena"></i><span>Arena</span></button>
+        <button class="tab" role="tab" data-tab="speed"><i data-icon="zap"></i><span>Speed</span></button>
+        <button class="tab" role="tab" data-tab="leaderboard"><i data-icon="leaderboard"></i><span>Leaderboard</span></button>
+      </nav>
+      <div class="topbar-right">
+        <div class="model-pill" id="modelPill" title="Current model"><i data-icon="cpu"></i><b id="modelPillText">no model</b></div>
+        <button class="icon-btn" id="themeToggle" aria-label="Switch between dark and light mode" title="Toggle theme"><i data-icon="sun"></i></button>
+      </div>
+    </header>
+
+    <!-- ---------------- Chat ---------------- -->
+    <section class="panel" id="tab-chat" role="tabpanel" style="overflow:hidden">
+      <div class="chat">
+        <div class="chat-bar">
+          <div class="score-pill" id="chatScore" title="Share of rated replies you marked helpful in this session"></div>
+          <span class="spacer"></span>
+          <button class="btn btn-sm btn-ghost" id="chatRegen" disabled><i data-icon="refresh"></i><span>Regenerate</span></button>
+          <button class="btn btn-sm btn-ghost" id="chatClear" disabled><i data-icon="trash"></i><span>Clear</span></button>
+        </div>
+        <div class="messages" id="messages"><div class="messages-inner" id="messagesInner"></div></div>
+        <div class="composer">
+          <div class="composer-inner">
+            <textarea id="chatInput" rows="1" dir="auto" placeholder="Message the model..." aria-label="Message"></textarea>
+            <button class="btn btn-primary" id="chatSend" aria-label="Send"><i data-icon="send"></i></button>
+          </div>
+          <div class="composer-hint"><kbd>Enter</kbd> to send &middot; <kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------------- Benchmark ---------------- -->
+    <section class="panel" id="tab-benchmark" role="tabpanel" hidden>
+      <div class="panel-inner">
+        <div class="card">
+          <div class="card-body">
+            <div class="row wrap">
+              <div class="grow">
+                <div class="card-title">Benchmark</div>
+                <div class="card-sub">Auto-graded tests, run at temperature 0 without your system prompt. API errors are shown but never count against the model.</div>
+              </div>
+              <button class="btn btn-ghost btn-sm" id="benchAll">Select all</button>
+              <button class="btn btn-ghost btn-sm" id="benchNone">Clear</button>
+            </div>
+            <div class="level-row">
+              <div class="seg" id="benchLevel" role="group" aria-label="Test level">
+                <button type="button" data-level="standard">Standard</button>
+                <button type="button" data-level="hard">Hard</button>
+              </div>
+              <span class="hint" id="benchLevelHint"></span>
+            </div>
+            <div class="cat-grid" id="benchCats"></div>
+            <div class="setup-row">
+              <div class="field">
+                <div class="label">Concurrency</div>
+                <div class="seg seg-sm" id="benchConc" role="group" aria-label="Concurrency">
+                  <button type="button" data-value="1">1</button><button type="button" data-value="2">2</button>
+                  <button type="button" data-value="3">3</button><button type="button" data-value="4">4</button>
+                </div>
+              </div>
+              <div class="field">
+                <label for="benchMaxTokens">Max tokens per test</label>
+                <input class="input" type="number" id="benchMaxTokens" min="64" max="64000" step="64">
+              </div>
+              <span class="spacer"></span>
+              <span class="muted" id="benchCount"></span>
+              <button class="btn btn-primary" id="benchRun"><i data-icon="play"></i><span>Run benchmark</span></button>
+              <button class="btn btn-danger" id="benchCancel" title="Stop the running benchmark. The tests that already finished are kept." hidden><i data-icon="stop"></i><span>Cancel</span></button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" id="benchProgress" hidden>
+          <div class="card-body">
+            <div class="row">
+              <div class="grow"><b id="benchProgressText"></b> <span class="muted" id="benchProgressSub"></span></div>
+              <span class="muted nowrap" id="benchElapsed"></span>
+            </div>
+            <div class="hint">Runs on the server: you can switch tabs or close this page, and it carries on. Reopen the page to see it again.</div>
+            <div class="progress" role="progressbar" aria-label="Benchmark progress"><div id="benchBar"></div></div>
+            <div class="running-list" id="benchRunning"></div>
+          </div>
+        </div>
+
+        <div id="benchNotes"></div>
+        <div id="benchResults" style="display:flex;flex-direction:column;gap:16px" hidden></div>
+
+        <details class="card fold" id="customCard">
+          <summary><i data-icon="chevron-right" class="chev"></i><span class="card-title">Custom tests</span>
+            <span class="badge badge-neutral" id="customCount">0</span><span class="spacer"></span>
+            <span class="muted" style="font-size:12.5px">Add your own prompts and graders</span></summary>
+          <div class="card-body">
+            <div class="custom-list" id="customList"></div>
+            <form class="form-grid" id="customForm" autocomplete="off">
+              <div class="field"><label for="customName">Name (optional)</label>
+                <input class="input" id="customName" maxlength="80" dir="auto" placeholder="e.g. Capital of France"></div>
+              <div class="field"><label for="customGrader">Grader</label>
+                <select class="select" id="customGrader">
+                  <option value="contains">contains - reply includes the text</option>
+                  <option value="exact">exact - reply equals the text</option>
+                  <option value="regex">regex - reply matches the pattern</option>
+                  <option value="number">number - final number equals</option>
+                  <option value="judge">judge - scored 0-10 by the judge model</option>
+                </select></div>
+              <div class="field full"><label for="customPrompt">Prompt</label>
+                <textarea class="textarea" id="customPrompt" rows="2" dir="auto" placeholder="The prompt sent to the model" required></textarea></div>
+              <div class="field full"><label for="customExpected" id="customExpectedLabel">Text the reply must contain</label>
+                <input class="input" id="customExpected" dir="auto"></div>
+              <div class="full row"><span class="hint" id="customHint"></span><span class="spacer"></span>
+                <button class="btn" type="submit"><i data-icon="plus"></i><span>Add test</span></button></div>
+            </form>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <!-- ---------------- Arena ---------------- -->
+    <section class="panel" id="tab-arena" role="tabpanel" hidden>
+      <div class="panel-inner">
+        <div class="card">
+          <div class="card-body">
+            <div>
+              <div class="card-title">Arena</div>
+              <div class="card-sub">One prompt, two models, side by side. Your votes build the Elo table. The judge can add a second opinion on any round, before or after you vote: it is shown next to yours and is never counted as a vote.</div>
+            </div>
+            <div class="arena-setup">
+              <div class="field">
+                <div class="label"><span class="side-tag">A</span>Model A<span class="spacer"></span>
+                  <button type="button" class="btn btn-ghost btn-sm" id="arenaUseMain">Use sidebar model</button></div>
+                <div id="arenaPickerA"></div>
+              </div>
+              <div class="field">
+                <div class="label" style="min-height:29px"><span class="side-tag">B</span>Model B</div>
+                <div id="arenaPickerB"></div>
+              </div>
+            </div>
+            <div class="field">
+              <label for="arenaPrompt">Prompt</label>
+              <textarea class="textarea" id="arenaPrompt" rows="3" dir="auto" placeholder="Ask both models the same thing..."></textarea>
+            </div>
+            <div class="row wrap">
+              <span class="hint">Uses the sidebar temperature, max tokens and system prompt. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> runs.</span>
+              <span class="spacer"></span>
+              <button class="btn btn-primary" id="arenaRun"><i data-icon="play"></i><span>Run both</span></button>
+              <button class="btn btn-danger" id="arenaStop" hidden><i data-icon="stop"></i><span>Stop</span></button>
+            </div>
+          </div>
+        </div>
+
+        <div class="arena-cols" id="arenaCols"></div>
+
+        <div class="card" id="arenaVote" hidden>
+          <div class="vote-bar" id="arenaVoteBar"></div>
+          <div id="arenaVerdict" class="verdicts" hidden></div>
+        </div>
+
+        <div class="card table-card">
+          <div class="filter-bar">
+            <i data-icon="award"></i><span class="card-title">Elo ratings</span>
+            <span class="muted" id="arenaVoteCount"></span>
+            <span class="badge badge-neutral" id="arenaAgreement" hidden></span><span class="spacer"></span>
+            <button class="btn btn-ghost btn-sm" id="arenaReset"><i data-icon="trash"></i><span>Reset</span></button>
+          </div>
+          <div class="table-scroll" id="arenaRatings"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------------- Speed ---------------- -->
+    <section class="panel" id="tab-speed" role="tabpanel" hidden>
+      <div class="panel-inner">
+        <div class="card">
+          <div class="card-body">
+            <div>
+              <div class="card-title">Speed test</div>
+              <div class="card-sub">Runs the same prompt several times, one after another, and measures how fast the sidebar model responds.</div>
+            </div>
+            <div class="field">
+              <label for="speedPrompt">Prompt</label>
+              <textarea class="textarea" id="speedPrompt" rows="2" dir="auto"></textarea>
+            </div>
+            <div class="setup-row">
+              <div class="field">
+                <label for="speedRuns">Runs (1-10)</label>
+                <input class="input" type="number" id="speedRuns" min="1" max="10" step="1">
+              </div>
+              <span class="spacer"></span>
+              <span class="muted" id="speedStatus"></span>
+              <button class="btn btn-primary" id="speedRun"><i data-icon="play"></i><span>Run speed test</span></button>
+              <button class="btn btn-danger" id="speedStop" hidden><i data-icon="stop"></i><span>Stop</span></button>
+            </div>
+          </div>
+        </div>
+        <div id="speedResults" style="display:flex;flex-direction:column;gap:16px"></div>
+      </div>
+    </section>
+
+    <!-- ---------------- Leaderboard ---------------- -->
+    <section class="panel" id="tab-leaderboard" role="tabpanel" hidden>
+      <div class="panel-inner wide">
+        <div class="card">
+          <div class="card-body">
+            <div class="row wrap" style="gap:14px">
+              <div class="grow" style="min-width:210px">
+                <div class="card-title">Leaderboard</div>
+                <div class="card-sub" id="lbSub">Every saved benchmark run.</div>
+              </div>
+              <div class="seg seg-sm" id="lbLevel" role="group" aria-label="Test level" title="Standard and Hard runs are ranked separately">
+                <button type="button" data-level="standard">Standard</button>
+                <button type="button" data-level="hard">Hard</button>
+              </div>
+              <label class="switch"><input type="checkbox" id="lbBest"> Best per model only</label>
+              <label class="switch" title="Runs that were cancelled, or interrupted because the server stopped"><input type="checkbox" id="lbUnfinished"> Include unfinished runs</label>
+              <label class="switch" title="Runs made with an earlier version of the tests or the grader. Their scores are not comparable with runs made today"><input type="checkbox" id="lbOlder"> Include older tests</label>
+              <button class="btn btn-sm" id="lbCsv"><i data-icon="download"></i><span>CSV</span></button>
+              <button class="btn btn-sm" id="lbJson"><i data-icon="download"></i><span>JSON</span></button>
+              <button class="icon-btn" id="lbRefresh" aria-label="Refresh" title="Refresh"><i data-icon="refresh"></i></button>
+            </div>
+            <div class="row wrap lb-settings" id="lbSettingsRow" hidden title="Runs are only ranked against runs with the same settings: a model that runs out of tokens at 8,192 can pass at 16,384, and two judges do not give the same marks">
+              <span class="muted">Settings of these runs:</span>
+              <b id="lbSettingsText"></b>
+              <select class="select" id="lbSettings" aria-label="Settings to show" hidden></select>
+              <span class="muted" id="lbSettingsNote"></span>
+              <button class="btn btn-sm" id="lbJudgeAgain" hidden title="Grade the judged results of these runs (Writing, Honesty, custom judge tests) again with the judge set in the sidebar, from the stored replies. No model is asked again, and code-graded results are not touched. The database is backed up first; the runs then move to the new judge's group"><i data-icon="refresh"></i><span>Judge again…</span></button>
+              <span class="muted" id="lbJudgeAgainNote"></span>
+            </div>
+          </div>
+        </div>
+        <div class="card" id="lbChartCard" hidden>
+          <div class="card-head"><i data-icon="leaderboard"></i><h3 id="lbChartTitle">Top models</h3></div>
+          <div class="card-body"><div class="bars" id="lbChart"></div></div>
+        </div>
+        <div class="card table-card"><div class="table-scroll" id="lbTable"></div></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<script type="module" src="/static/js/main.js"></script>
+</body>
+</html>

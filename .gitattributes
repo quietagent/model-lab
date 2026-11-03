@@ -1,0 +1,4 @@
+# Text files are stored with LF and checked out with LF on every machine,
+# whatever core.autocrlf is set to. Batch files keep CRLF for cmd.exe.
+* text=auto eol=lf
+*.bat text eol=crlf
